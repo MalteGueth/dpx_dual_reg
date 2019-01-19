@@ -36,7 +36,7 @@ for file in glob.glob(os.path.join(path, '*base-epo.fif')):
     
     # Create the pipeline with linear support vector classification
     # and balanced classes. Alternatively, instead of equlizing trial
-    # counts, this argument can be set to unbalanced.
+    # counts, class weights for each condition can be specified.
     clf = make_pipeline(Vectorizer(), StandardScaler(),
                         LinearSVC(class_weight='balanced')
                         )
