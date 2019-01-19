@@ -15,14 +15,6 @@ from mne.decoding import Vectorizer, SlidingEstimator, cross_val_multiscore, Gen
 path = './epochs/'
 
 ### start the decoding for baseline
-# preallocate results arrays
-time = 2.75
-srate = 256
-pnts = int(time*srate)
-scoring = 3
-
-scores_td_base = np.empty(shape=(scoring, pnts))
-scores_gat_base = np.empty(shape=(scoring, pnts, pnts))
 
 for file in glob.glob(os.path.join(path, '*base-epo.fif')):
     
@@ -55,13 +47,19 @@ for file in glob.glob(os.path.join(path, '*base-epo.fif')):
     scores_time_decoding = cross_val_multiscore(sl, X, y)
     
     # Append the results for each subject
-    scores_td_base = np.append(scores_td_base, scores_time_decoding, axis=0)
+    if file == './epochs/101_base-epo.fif':
+        scores_td_base = scores_time_decoding
+    else:
+        scores_td_base = np.append(scores_td_base, scores_time_decoding, axis=0)
     
     # Again, calculate scores with a receiver operating curve
     gen = GeneralizingEstimator(clf, scoring='roc_auc')
     scores_gat = cross_val_multiscore(gen, X, y)
     
-    scores_gat_base = np.append(scores_gat_base, scores_gat, axis=0)
+    if file == './epochs/101_base-epo.fif':
+        scores_gat_base = scores_gat
+    else:
+        scores_gat_base = np.append(scores_gat_base, scores_gat, axis=0)
         
 for file in glob.glob(os.path.join(path, '*reg-epo.fif')):
     
@@ -82,11 +80,19 @@ for file in glob.glob(os.path.join(path, '*reg-epo.fif')):
     
     sl = SlidingEstimator(clf, scoring='roc_auc')
     scores_time_decoding = cross_val_multiscore(sl, X, y)
-    scores_td_reg = np.append(scores_td_reg, scores_time_decoding, axis=0)
     
+    if file == './epochs/101_reg-epo.fif':
+        scores_td_reg = scores_time_decoding
+    else:
+        scores_td_reg = np.append(scores_td_reg, scores_time_decoding, axis=0)  
+        
     gen = GeneralizingEstimator(clf)
     scores_gat = cross_val_multiscore(gen, X, y)
-    scores_gat_reg = np.append(scores_gat_reg, scores_gat, axis=0)
+    
+    if file == './epochs/101_reg-epo.fif':
+        scores_gat_reg = scores_gat
+    else:
+        scores_gat_reg = np.append(scores_gat_reg, scores_gat, axis=0)  
         
 ###### Plot decoding results
 
