@@ -83,7 +83,8 @@ rt = []
 
 # loop trough events and recode them
 for event in range(len(new_evs[:, 2])):
-    # --- if event is a cue stimulus ---
+
+    # - if event is a cue stimulus -
     if new_evs[event, 2] in {5, 6, 7, 8, 9, 10}:
 
         # save block based on onset (before or after break)
@@ -96,7 +97,7 @@ for event in range(len(new_evs[:, 2])):
         elif (new_evs[event, 0] / sfreq) > block_end[2]:
             block.append(1)
 
-        # --- 1st check: if next event is a false reaction ---
+        # -- if next event is a false reaction --
         if new_evs[event + 1, 2] in {1, 2}:
             # if event is an A-cue
             if new_evs[event, 2] == 5:
@@ -110,6 +111,7 @@ for event in range(len(new_evs[:, 2])):
             # look for next probe
             i = 2
             while new_evs[event + i, 2] not in {11, 12, 13, 14, 15, 16}:
+                # if no probe is found before next cue is presented
                 if new_evs[event + i, 2] in {5, 6, 7, 8, 9, 10}:
                     broken.append(trial)
                     break
@@ -145,7 +147,7 @@ for event in range(len(new_evs[:, 2])):
                 if new_evs[event + 2, 2] in {3, 4}:
 
                     # save response
-                    reaction.append(1)
+                    reaction.append('Correct')
 
                     # if cue was an A
                     if new_evs[event, 2] == 5:
@@ -188,7 +190,7 @@ for event in range(len(new_evs[:, 2])):
                 else:
 
                     # save response
-                    reaction.append(0)
+                    reaction.append('Incorrect')
 
                     # if cue was an A
                     if new_evs[event, 2] == 5:
@@ -232,7 +234,7 @@ for event in range(len(new_evs[:, 2])):
             elif new_evs[event + 2, 2] not in {1, 2, 3, 4}:
 
                 # save reaction time as NaN
-                rt.append(99999)
+                rt.append(np.nan)
                 reaction.append(np.nan)
 
                 # if cue was an A
@@ -382,12 +384,12 @@ for cue, probe in zip(cue_events[:, 2], probe_events[:, 2]):
     probes.append(probe)
 
 # subject's experimental group
-if subject in [1, 4, 7, 8, 13, 19, 20, 21, 22, 23, 25]:
-    group = 0
-elif subject in [2, 3, 6, 11, 12, 14, 15, 16, 17, 18, 24, 26, 27]:
+if subject in [1, 4, 7, 8, 10, 13, 18, 19, 20, 21, 22, 23, 25]:
     group = 1
-else:
+elif subject in [2, 3, 6, 9, 11, 12, 14, 15, 16, 17, 24, 26, 27]:
     group = 2
+elif subject in [5]:
+    group = np.nan
 
 # create data frame with epochs metadata
 metadata = {'group': np.delete(np.repeat(group, trial),  broken, 0),
@@ -428,7 +430,7 @@ elif raw.info['sfreq'] == 1024.0:
 cue_epochs = Epochs(raw, cue_events, cue_event_id,
                     metadata=metadata,
                     on_missing='ignore',
-                    tmin=-2.,
+                    tmin=-2.0,
                     tmax=2.5,
                     baseline=None,
                     preload=True,
@@ -440,8 +442,8 @@ cue_epochs = Epochs(raw, cue_events, cue_event_id,
 probe_epochs = Epochs(raw, probe_events, probe_event_id,
                       metadata=metadata,
                       on_missing='ignore',
-                      tmin=-3.,
-                      tmax=2.,
+                      tmin=-3.0,
+                      tmax=1.5,
                       baseline=None,
                       preload=True,
                       reject_by_annotation=True,

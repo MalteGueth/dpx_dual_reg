@@ -55,7 +55,7 @@ ica.fit(raw_filt,
 
 ###############################################################################
 # 3) Plot ICA components
-ica_fig = ica.plot_components(picks=range(0, 20), show=False)
+ica_fig = ica.plot_components(picks=range(0, 15), show=False)
 
 ###############################################################################
 # 4) Save ICA solution

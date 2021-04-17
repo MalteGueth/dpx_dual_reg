@@ -11,7 +11,9 @@ License: BSD (3-clause)
 """
 import os
 from os import path as op
+
 import platform
+import multiprocessing
 
 import argparse
 import numpy as np
@@ -56,8 +58,8 @@ if 'Jose' in node and 'n' in system:
     n_jobs = 2  # This station has 4 cores (we'll use 2).
 elif 'jose' in node and 'x' in system:
     # pc at home
-    data_dir = '../data'
-    n_jobs = 8  # This station has 16 cores (we'll use 8).
+    data_dir = '../data_bids'
+    n_jobs = 'cuda'  # Use NVIDIA CUDA GPU processing
 elif 'ma04' in node:
     data_dir = '../data'
     n_jobs = 2
@@ -67,7 +69,10 @@ else:
     n_jobs = 1
 
 # For BLAS to use the right amount of cores
-os.environ['OMP_NUM_THREADS'] = str(n_jobs)
+use_cores = multiprocessing.cpu_count()//2
+if use_cores < 2:
+    use_cores = 1
+os.environ['OMP_NUM_THREADS'] = str(use_cores)
 
 ###############################################################################
 # Relevant parameters for the analysis.
@@ -133,15 +138,13 @@ def source_file(files, source_type, subject):
     if source_type == 'eeg':
         return \
             op.join(files.sourcedata_dir,
-                    'sub-%02d/%s/sub-%02d_dualreg_eeg.bdf' % (subject,
-                                                              source_type,
-                                                              subject))
+                    'sub-%02d/%s/sub-%02d_dualreg_eeg.bdf'
+                    % (subject, source_type, subject))
     elif source_type == 'demo':
         return \
             op.join(files.sourcedata_dir,
-                    'sub-%02d/%s/sub-%02d_dualreg_demographics.tsv' % (subject,
-                                                                       source_type,
-                                                                       subject))
+                    'sub-%02d/%s/sub-%02d_dualreg_demographics.tsv'
+                    % (subject, source_type, subject))
 
 
 # create full path for data file input
