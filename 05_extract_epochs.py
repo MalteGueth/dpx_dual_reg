@@ -89,13 +89,13 @@ for event in range(len(new_evs[:, 2])):
 
         # save block based on onset (before or after break)
         if (new_evs[event, 0] / sfreq) < block_end[0]:
-            block.append(0)
+            block.append('Single')
         elif ((new_evs[event, 0] / sfreq) > block_end[0]) & ((new_evs[event, 0] / sfreq) < block_end[1]):
-            block.append(0)
+            block.append('Single')
         elif ((new_evs[event, 0] / sfreq) > block_end[1]) & ((new_evs[event, 0] / sfreq) < block_end[2]):
-            block.append(1)
+            block.append('Dual')
         elif (new_evs[event, 0] / sfreq) > block_end[2]:
-            block.append(1)
+            block.append('Dual')
 
         # -- if next event is a false reaction --
         if new_evs[event + 1, 2] in {1, 2}:
@@ -385,9 +385,9 @@ for cue, probe in zip(cue_events[:, 2], probe_events[:, 2]):
 
 # subject's experimental group
 if subject in [1, 4, 7, 8, 10, 13, 18, 19, 20, 21, 22, 23, 25]:
-    group = 1
+    group = 'Low'
 elif subject in [2, 3, 6, 9, 11, 12, 14, 15, 16, 17, 24, 26, 27]:
-    group = 2
+    group = 'High'
 elif subject in [5]:
     group = np.nan
 

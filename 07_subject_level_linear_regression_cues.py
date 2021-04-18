@@ -32,6 +32,10 @@ baseline = (-0.300, -0.050)
 # 1) loop through subjects and compute ERPs for A and B cues
 for subj in subjects:
 
+    # remove subject 5 from analysis
+    if subj == 5:
+        continue
+
     # log progress
     print(LoggingFormat.PURPLE +
           LoggingFormat.BOLD +
@@ -70,22 +74,27 @@ subjects = list(cues.keys())
 # independent variables to be used in the analysis (i.e., predictors)
 predictors = ['cue', 'block']
 
-# number of predictors
-n_predictors = len(predictors)
+# compute number of predictors minus the intercept
+# here: cue A before manipulation is set as reference level
+# therefore design matrixs shows:
+# 1) effect of cue B against cue A in baseline
+# 2) effect of manipulation on cue A
+# 3) effect of manipulation on cue B
+generic_design = generic.metadata[predictors]
+generic_design = patsy.dmatrix("cue + C(block, Treatment('Single')) + "
+                               "cue:C(block, Treatment('Single'))",
+                               generic_design,
+                               return_type='dataframe')
+n_predictors = len(generic_design.columns) - 1
 
 ###############################################################################
 # 3) initialise place holders for the storage of results
-betas_cue = np.zeros((len(cues.values()),
-                      n_channels * n_times))
-betas_block = np.zeros((len(cues.values()),
-                        n_channels * n_times))
-betas_cue_by_block = np.zeros((len(cues.values()),
-                               n_channels * n_times))
+betas = np.zeros((n_predictors,
+                  len(cues.values()),
+                  n_channels * n_times))
 
 r_squared = np.zeros((len(cues.values()),
                       n_channels * n_times))
-
-contrast = [[-0.5], [0.5]]
 
 ###############################################################################
 # 4) Fit linear model for each subject
@@ -97,18 +106,15 @@ for subj_ind, subj in enumerate(cues):
 
     # only keep predictor columns
     design = metadata[predictors]
-
-    # # dummy code cue variable
-    # dummies = pd.get_dummies(design[predictors], drop_first=True)
-    # design = pd.concat([design.drop(predictors, axis=1), dummies], axis=1)
-    # design.cue_B = design.cue_B - design.cue_B.unique().mean()
+    # design['block'].cat.reorder_categories(['Single', 'Dual'], inplace=True)
 
     # create design matrix
-    # design = patsy.dmatrix("cue", design, return_type='dataframe')
-    design = patsy.dmatrix('C(cue, contrast) * C(block, contrast)', design,
+    design = patsy.dmatrix("cue + C(block, Treatment('Single')) + "
+                           "cue:C(block, Treatment('Single'))", design,
                            return_type='dataframe')
-    col = dict(zip(design.columns, ['Intercept', 'cue', 'block', 'cue:block']))
-    design = design.rename(col, axis='columns')
+    design.columns = ['Intercept', 'cue[T.B]', 'block[T.Dual]',
+                      'cue[T.B]:block[T.Dual]']
+    design = design[['cue[T.B]', 'block[T.Dual]', 'cue[T.B]:block[T.Dual]']]
 
     # 4.2) vectorise channel data for linear regression
     # data to be analysed
@@ -119,7 +125,7 @@ for subj_ind, subj in enumerate(cues):
     # 4.3) fit linear model with sklearn's LinearRegression
     weights = compute_sample_weight(class_weight='balanced',
                                     y=metadata.cue.to_numpy())
-    linear_model = LinearRegression(n_jobs=n_jobs, fit_intercept=False)
+    linear_model = LinearRegression(n_jobs=n_jobs, fit_intercept=True)
     linear_model.fit(design, Y, sample_weight=weights)
 
     # 4.4) extract the resulting coefficients (i.e., betas)
@@ -135,21 +141,17 @@ for subj_ind, subj in enumerate(cues):
     # save results
     for pred_i, predictor in enumerate(design.columns):
         print(pred_i, predictor)
-        if 'Intercept' in predictor:
-            continue
-        elif 'cue' == predictor:
+        if 'cue' in predictor and 'block' not in predictor:
             # extract cue beats
-            betas_cue[subj_ind, :] = coefs[:, pred_i]
-        elif 'block' == predictor:
+            betas[pred_i, subj_ind, :] = coefs[:, pred_i]
+        elif 'cue' not in predictor and 'block' in predictor:
             # extract cue beats
-            betas_block[subj_ind, :] = coefs[:, pred_i]
-        elif 'cue:block' == predictor:
+            betas[pred_i, subj_ind, :] = coefs[:, pred_i]
+        elif 'cue' in predictor and 'block' in predictor:
             # extract cue beats
-            betas_cue_by_block[subj_ind, :] = coefs[:, pred_i]
+            betas[pred_i, subj_ind, :] = coefs[:, pred_i]
 
 ###############################################################################
 # 5) Save subject-level results to disk
-np.save(fname.results + '/subj_betas_cue_m250_robust.npy', betas_cue)
-np.save(fname.results + '/subj_betas_block_m250_robust.npy', betas_block)
-np.save(fname.results + '/subj_betas_cue_by_block_m250_robust.npy', betas_cue_by_block)  # noqa
+np.save(fname.results + '/subj_betas_cue_by_block_m250_robust.npy', betas)
 np.save(fname.results + '/subj_r2_cue_m250_robust.npy', r_squared)
