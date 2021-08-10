@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from scipy.stats import zscore
+import patsy
 
 from sklearn.linear_model import LinearRegression
 
@@ -27,16 +27,23 @@ from mne import read_epochs
 
 # All parameters are defined in config.py
 from config import subjects, fname, LoggingFormat
+subjects = subjects[subjects != 5]
+
+# experimental group for each subject
+group = list()
+for subject in subjects:
+    # subject's experimental group
+    if subject in [1, 4, 7, 8, 10, 13, 18, 19, 20, 21, 22, 23, 25]:
+        group.append('Low')
+    elif subject in [2, 3, 6, 9, 11, 12, 14, 15, 16, 17, 24, 26, 27]:
+        group.append('High')
+    elif subject in [5]:
+        continue
+group = pd.DataFrame({'group': group})
 
 # load individual beta coefficients
-betas_cue = np.load(fname.results + '/subj_betas_cue_m250_robust.npy')
-betas_cue = np.load(fname.results + '/subj_betas_block_m250_robust.npy')
 betas_cue = np.load(fname.results + '/subj_betas_cue_by_block_m250_robust.npy')
-covariate = fname.results + '/pbi.tsv'
 generic_subj = subjects[0]
-
-# Subject information about performance in the task
-pbi_rt = pd.read_csv(covariate, sep='\t', header=0)
 
 ###############################################################################
 # 1) import epochs to use as template
@@ -57,13 +64,9 @@ times = cue_epo.times
 ###############################################################################
 # 2) compute bootstrap confidence interval for cue betas and t-values
 
-#  z-score PBI predictor
-pbi_rt = pbi_rt.drop('subject', axis=1)
-pbi_rt['pbi_rt_z'] = zscore(pbi_rt.pbi_rt)
-
-# create group-level design matrix for effect of moderator (i.e., PBI)
-pbi_rt = pbi_rt.assign(intercept=1)
-pbi_rt = pbi_rt[['intercept', 'pbi_rt_z']]
+# create design matrix
+group = patsy.dmatrix("group", group,
+                      return_type='dataframe')
 
 # set random state for replication
 random_state = 42
@@ -77,7 +80,7 @@ cluster_H0 = np.zeros(boot)
 f_H0 = np.zeros(boot)
 
 # setup adjacency matrix
-n_tests = betas.shape[1]
+n_tests = betas_cue.shape[2]
 adjacency, ch_names = find_ch_adjacency(epochs_info, ch_type='eeg')
 adjacency = _setup_adjacency(adjacency, n_tests, n_times)
 
@@ -85,10 +88,10 @@ adjacency = _setup_adjacency(adjacency, n_tests, n_times)
 threshold = dict(start=0.2, step=0.2)
 
 # store a_bias (bootstrap) betas
-pbi_rt_betas = np.zeros((boot, n_channels * n_times))
+group_pp_betas = np.zeros((boot, n_channels * n_times))
 
 # center betas around zero
-betas_null = betas - betas.mean(axis=0)
+betas_null = betas_cue[0, ...] - betas_cue[0, ...].mean(axis=0)
 
 # run bootstrap for regression coefficients
 for i in range(boot):
@@ -101,25 +104,25 @@ for i in range(boot):
 
     # *** 2.1) create bootstrap sample ***
     # extract random subjects from overall sample
-    resampled_subjects = random.choice(range(betas.shape[0]),
-                                       betas.shape[0],
+    resampled_subjects = random.choice(range(betas_cue[0, ...].shape[0]),
+                                       betas_cue[0, ...].shape[0],
                                        replace=True)
     # resampled betas
-    resampled_betas = betas[resampled_subjects, :]
+    resampled_betas = betas_cue[0, ...][resampled_subjects, :]
 
     # *** 2.2) estimate effect of moderator (i.e., PBI) on group-level ***
     # set up and fit moderator (i.e., PBI) model using bootstrap sample
     model_boot = LinearRegression(fit_intercept=False)
-    model_boot.fit(X=pbi_rt.iloc[resampled_subjects], y=resampled_betas)
+    model_boot.fit(X=group.iloc[resampled_subjects], y=resampled_betas)
 
     # extract regression coefficients
     group_coefs = get_coef(model_boot, 'coef_')
 
     # save bootstrap betas
-    for pred_i, predictor in enumerate(pbi_rt.columns):
+    for pred_i, predictor in enumerate(group.columns):
         if 'pbi_rt' in predictor:
             # store regression coefficient for moderator (i.e., PBI)
-            pbi_rt_betas[i, :] = group_coefs[:, pred_i]
+            group_pp_betas[i, :] = group_coefs[:, pred_i]
 
     # remove prev object
     del resampled_betas
@@ -160,12 +163,12 @@ for i in range(boot):
 # 3) Save results of bootstrap procedure
 
 # save f-max distribution
-np.save(fname.results + '/f_H0_10000b_2t_m250_null_robust.npy', f_H0)
+np.save(fname.results + '/f_H0_10000b_2t_m250_null_robust_cue.npy', f_H0)
 # save cluster mass distribution
-np.save(fname.results + '/cluster_H0_10000b_2t_m250_null_robust.npy',
+np.save(fname.results + '/cluster_H0_10000b_2t_m250_null_robust_cue.npy',
         cluster_H0)
 # save pbi_rt betas
-np.save(fname.results + '/pbi_rt_betas_m250_null_robust.npy', pbi_rt_betas)
+np.save(fname.results + '/group_betas_m250_null_robust.npy', group_pp_betas)
 
 # plot results
 y_max = np.histogram(f_H0, bins=100)[0]
@@ -179,4 +182,4 @@ ax.text(x=np.quantile(f_H0, 0.95),
         fontdict=dict(fontsize=12),
         verticalalignment='top',
         bbox=dict(boxstyle='round', facecolor='white', alpha=1.0))
-plt.savefig(fname.figures + '/F_max_distribution_robust.pdf', dpi=300)
+plt.savefig(fname.figures + '/F_max_distribution_cue_robust.pdf', dpi=300)
