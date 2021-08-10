@@ -1,9 +1,9 @@
 # Title     : Analysis of personality data
-# Objective : Check if personality variables are distrivited in the correct
+# Objective : Check if personality variables are distributed in the correct
 #             way (i.e., high and low scoring in personality questionnaires
 # Created by: Jose C. Garcia Alanis
-# Created on: 06.03.21
-# R version : R version 4.0.3 (2020-10-10), Bunny-Wunnies Freak Out
+# Created on: 10.08.21
+# R version : R version 4.1.0 (2021-05-18) -- "Camp Pontanezen"
 
 # --- set working directory ---
 # use this if working from r-studio
@@ -19,13 +19,13 @@ source('./r_functions/bootdif.R')
 # get system and user information
 host <- Sys.info()
 
-# set default path or promt user for other path
-if (grep('Joses',  host['nodename'])) {
+# set default path or ask user for other path
+if (grep('Joses',  host['nodename']) || grep('ma',  host['nodename'])) {
   
-  # defaut path in project structure
+  # default path in project structure
   path_subject_data <- '../data/subject_data/subject_data_dpx-dualreg.tsv'
   
-} else {
+  } else {
   
   path_subject_data <- readline('Please provide path to subject data: ')
   
