@@ -20,3 +20,5 @@ system_check.txt
 /00_debug.py
 /validator.json
 /99_snippeds.py
+/r_scripts/00_trouble_shoot.R
+/r_scripts/99_snippeds.R

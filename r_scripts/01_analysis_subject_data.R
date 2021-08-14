@@ -23,7 +23,7 @@ host <- Sys.info()
 if (grep('Joses',  host['nodename']) || grep('ma',  host['nodename'])) {
   
   # default path in project structure
-  path_subject_data <- '../data/subject_data/subject_data_dpx-dualreg.tsv'
+  path_subject_data <- '../data/subject_data/'
   
   } else {
   
@@ -34,121 +34,175 @@ if (grep('Joses',  host['nodename']) || grep('ma',  host['nodename'])) {
 # 2) import subject data -----------------------------------------------------
 getPacks(c('dplyr', 'tidyr'))
 
-subject_data <- read.table(path_subject_data, header = T, sep = '\t')
-subject_data <- subject_data %>%
-  drop_na() %>%
-  mutate(pp_group = ifelse(group == 0, 1, group)) %>%
-  mutate(pp_group = factor(pp_group, labels = c('low',
-                                                'high')))
+ppi_data <- read.table(paste0(path_subject_data, 'ppi_data.tsv'), 
+                           header = T, sep = '\t')
+
+# add descriptive group name
+ppi_data <- ppi_data %>%
+  mutate(pp_group = ifelse(group_pattern == 1, 'low', 
+                           ifelse(group_pattern == 2, 'high', NA)))
 
 # extract psychopathic personality inventory (PPI) data
-ppi_data <- subject_data %>%
-  select(pp_group,
-         psychopathy_score,
-         impulsive_nonconformity:dishonest_responsiveness)
+ppi_scales <- ppi_data %>%
+  select(id, 
+         pp_group,
+         si_pr, sp_pr, f_pr)
+
+# check number of observations per group
+ppi_data %>% group_by(pp_group) %>% tally()
+ppi_data %>% group_by(pp_group, sex) %>% tally()
+
+# mean age and sex
+ppi_data %>% group_by(pp_group) %>% summarise(mean(age), sd(age))
+
+# remove that where not assigned to a group
+ppi_scales <- ppi_scales %>% 
+  filter(!is.na(pp_group)) %>%
+  mutate(pp_group = factor(pp_group, 
+                           levels = c('high', 'low'),
+                           labels = c('High', 'Low')))
 
 # extract subscales of PPI
-ppi_subscales <- ppi_data %>%
-  select(pp_group, impulsive_nonconformity:dishonest_responsiveness) %>%
+ppi_subscales <- ppi_scales %>%
+  select(pp_group, si_pr:f_pr) %>%
   gather('scale', 'score', -pp_group) %>%
   mutate(scale = factor(scale)) %>%
-  mutate(scale = recode(scale,
-                        'blame_externalization' = 'BE',
-                        'carefree_non_planfulness' = 'CNP',
-                        'cold_heartedness' = 'CH',
-                        'dishonest_responsiveness' = 'DR',
-                        'fearlessness' = 'F',
-                        'impulsive_nonconformity' = 'IN',
-                        'machiavellian_egocentricity' = 'ME',
-                        'social_potency' = 'SP',
-                        'stress_immunity' ='SI'))
+  mutate(scale = recode(scale, 'si_pr' = 'SI', 'sp_pr' = 'SP', 'f_pr' = 'F')) %>%
+  mutate(scale = factor(scale, levels = c('SI', 'SP', 'F')))
+  # mutate(scale = recode(scale,
+  #                       'blame_externalization' = 'BE',
+  #                       'carefree_non_planfulness' = 'CNP',
+  #                       'cold_heartedness' = 'CH',
+  #                       'dishonest_responsiveness' = 'DR',
+  #                       'fearlessness' = 'F',
+  #                       'impulsive_nonconformity' = 'IN',
+  #                       'machiavellian_egocentricity' = 'ME',
+  #                       'social_potency' = 'SP',
+  #                       'stress_immunity' ='SI'))
 
 # 3) create exploratory plots ------------------------------------------------
-getPacks(c('ggplot2', 'viridis'))
+getPacks(c('ggplot2', 'ggbeeswarm', 'see', 'viridis'))
 
 # --- create plot of achieved overall scores in the PPI ---
 # allow point to spread a little bit along the x-axis
-pj <- position_jitter(0.125)
-pd <- position_nudge(c(-0.25, 0.25))
-# create plot
-overall_ppi_plot <- ggplot(data = ppi_data,
-       aes(x = pp_group,
-           y = psychopathy_score,
-           fill = pp_group,
-           shape = pp_group)) +
-  geom_boxplot(width = 0.1, alpha = 0.5, position = pd) +
-  geom_point(position = pj, size = 1.5) +
-  scale_shape_manual(values = c(25, 24)) +
-  scale_fill_viridis(option = 'B', discrete = T, begin = 0.1, end = 0.6) +
-  scale_color_viridis(option = 'B', discrete = T, begin = 0.1, end = 0.6) +
-  scale_y_continuous(limits = c(15, 85)) +
-  geom_segment(aes(x = -Inf, y = 20, xend = -Inf, yend = 80),
-               color = 'black', size = rel(0.5), linetype = 1) +
-  geom_segment(aes(x = 'low', y = -Inf, xend = 'high', yend = -Inf),
-               color = 'black', size = rel(0.5), linetype = 1) +
-  labs(x = '',
-       y = 'Overall PPI Score',
-       fill = 'Psychopathy',
-       shape = 'Psychopathy') +
-  theme(panel.background = element_rect(fill = 'gray98'),
-        axis.title.x = element_text(color = 'black',
-                                    size = 12,
-                                    face = 'bold',
-                                    margin = margin(t = 15)),
-        axis.title.y= element_text(color = 'black',
-                                   size = 12,
-                                   face = 'bold',
-                                   margin = margin(r = 15)),
-        axis.text = element_text(color = 'black',
-                                 size = 10),
-        legend.position = 'bottom',
-        legend.direction = 'horizontal',
-        legend.key = element_blank()); overall_ppi_plot
-ggsave('../data/derivatives/results/figures/overall_ppi_plot.pdf',
-       overall_ppi_plot, width = 3.0, height = 5.0)
 
-# --- create plot of achieved scores in the PPI subscales ---
-# allow point to spread a little bit along the x-axis
-pj <- position_jitterdodge(jitter.width = 0.25, dodge.width = 0.25)
-pd <- position_nudge(c(-0.20, 0.20))
+# pd <- position_nudge(c(-0.25, 0.25))
+pn <- position_nudge(0.2)
+
 # create plot
-subscale_ppi_plot <- ggplot(data = ppi_subscales,
+ppi_percentiles_plot <- ggplot(data = ppi_subscales,
        aes(x = scale,
            y = score,
            fill = pp_group,
            shape = pp_group)) +
-  geom_boxplot(width = 0.08, alpha = 0.5, position = pd, outlier.color = NA) +
-  geom_point(position = pj, size = 1.5) +
-  scale_shape_manual(values = c(25, 24)) +
-  scale_fill_viridis(option = 'B', discrete = T, begin = 0.1, end = 0.6) +
-  scale_color_viridis(option = 'B', discrete = T, begin = 0.1, end = 0.6) +
-  scale_y_continuous(limits = c(15, 85)) +
-  geom_segment(aes(x = -Inf, y = 20, xend = -Inf, yend = 80),
+  facet_wrap(~ pp_group, scales = 'free_y') +
+  geom_beeswarm(size = 2.0, alpha = 0.70, 
+                color = 'black', stroke = 0.75) + 
+  geom_boxplot(width = 0.2, alpha = 0.75, position = pn, 
+               outlier.colour = NA, size = 0.8) +
+  scale_shape_manual(values = c(24, 25)) +
+  scale_fill_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  scale_color_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  # scale_fill_viridis(option = 'A', discrete = T, begin = 0.1, end = 0.6, direction = -1) +
+  # scale_color_viridis(option = 'A', discrete = T, begin = 0.1, end = 0.6, direction = -1) +
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 100, 25)) +
+  geom_segment(aes(x = -Inf, y = 0, xend = -Inf, yend = 100),
                color = 'black', size = rel(0.5), linetype = 1) +
-  geom_segment(aes(x = 'BE', y = -Inf, xend = 'SI', yend = -Inf),
+  geom_segment(aes(x = 'SI', y = -Inf, xend = 'F', yend = -Inf),
                color = 'black', size = rel(0.5), linetype = 1) +
-  labs(x = 'PPI Subscale',
-       y = 'Score',
+  labs(title = 'PPI percentile scores by group',
+       x = '',
+       y = 'T-value',
        fill = 'Psychopathy',
        shape = 'Psychopathy') +
-  theme(panel.background = element_rect(fill = 'gray98'),
+  theme(plot.background = element_rect(fill = "white"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(color = 'gray98', size = 0.5),
+        strip.background = element_blank(),
+        strip.text = element_text(color = 'black',
+                                  size = 12,
+                                  face = 'bold',
+                                  family='Mukta'),
+        plot.title = element_text(color = 'black',
+                                  size = 12,
+                                  face = 'bold',
+                                  family='Mukta'),
         axis.title.x = element_text(color = 'black',
                                     size = 12,
                                     face = 'bold',
-                                    margin = margin(t = 15)),
-        axis.title.y= element_text(color = 'black',
+                                    margin = margin(t = 15),
+                                    family='Mukta'),
+        axis.title.y = element_text(color = 'black',
                                    size = 12,
                                    face = 'bold',
-                                   margin = margin(r = 15)),
-        axis.text.x = element_text(color = 'black',
-                                   size = 10),
-        axis.text.y = element_text(color = 'black',
-                                   size = 10),
-        legend.position = 'bottom',
-        legend.direction = 'horizontal',
-        legend.key = element_blank()); subscale_ppi_plot
-ggsave('../data/derivatives/results/figures/subscale_ppi_plot.pdf',
-       subscale_ppi_plot, width = 10.0, height = 5.0)
+                                   margin = margin(r = 15),
+                                   family='Mukta'),
+        axis.text = element_text(color = 'black',
+                                 size = 10),
+        legend.position = 'none'); ppi_percentiles_plot
+ggsave('../data/derivatives/results/figures/ppi_percentiles_plot.png',
+       ppi_percentiles_plot, width = 7.0, height = 3.0, dpi = 600)
+
+# --- create plot of achieved scores in the PPI subscales ---
+# allow point to spread a little bit along the x-axis
+
+
+ppi_means <- ppi_subscales %>%
+  group_by(pp_group, scale) %>%
+  summarise(mean_cl_boot(score))
+
+getPacks(c('Hmisc'))
+# create plot
+ppi_means_plot <- ggplot(data = ppi_means,
+                         aes(x = scale,
+                             y = y,
+                             fill = pp_group,
+                             shape = pp_group)) +
+  geom_line(aes(group = pp_group, color = pp_group), size = 0.6) +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax, color = pp_group),
+                width = 0.15, size = 0.6, alpha = 0.8) +
+  geom_point(size = 1.5, stroke = 0.8) +
+  scale_y_continuous(limits = c(0, 110), breaks = seq(0, 100, 25)) +
+  scale_shape_manual(values = c(24, 25)) +
+  scale_fill_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  scale_color_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  geom_segment(aes(x = -Inf, y = 0, xend = -Inf, yend = 100),
+               color = 'black', size = rel(0.5), linetype = 1) +
+  geom_segment(aes(x = 'SI', y = -Inf, xend = 'F', yend = -Inf),
+               color = 'black', size = rel(0.5), linetype = 1) +
+  labs(title = 'Bootstrap Means and CIs', 
+       y = 'Percentile Score', x  = 'PPI sub-scale',
+       fill = 'PPI Group', shape = 'PPI Group', color = 'PPI Group')+
+  theme(plot.background = element_rect(fill = "white"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(color = 'gray98', size = 0.5),
+        strip.background = element_blank(),
+        strip.text = element_text(color = 'black',
+                                  size = 12,
+                                  face = 'bold',
+                                  family='Mukta'),
+        plot.title = element_text(color = 'black',
+                                  size = 12,
+                                  face = 'bold',
+                                  family='Mukta'),
+        axis.title.x = element_text(color = 'black',
+                                    size = 12,
+                                    face = 'bold',
+                                    margin = margin(t = 15),
+                                    family='Mukta'),
+        axis.title.y = element_text(color = 'black',
+                                    size = 12,
+                                    face = 'bold',
+                                    margin = margin(r = 15),
+                                    family='Mukta'),
+        axis.text = element_text(color = 'black',
+                                 size = 10),
+        legend.position = 'right',
+        legend.direction = 'vertical',
+        legend.key = element_blank(),
+        legend.key.size = unit(2, 'line')); ppi_means_plot
+ggsave('../data/derivatives/results/figures/ppi_means_plot.png',
+       ppi_means_plot, width = 4.0, height = 3.0, dpi = 600)
 
 # 4) test group diffrences in ppi scores -------------------------------------
 # initialize place holders for results
@@ -159,19 +213,22 @@ p_vals <- NULL
 boot_diffs <- NULL
 boot_cis <- NULL
 # loop through scales ans compute statistics
-for (var in names(ppi_data)[-1]) {
+for (var in c('age', 'total_pr', 'si_pr', 'sp_pr', 'f_pr')) {
   low <- ppi_data[ppi_data$pp_group == 'low', var]
   high <- ppi_data[ppi_data$pp_group == 'high', var]
 
+  # tests
   norm <- shapiro.test(c(low, high))
-  w_res <- t.test(low, high,
-                  paired = FALSE, alternative = 'less')
+  w_res <- wilcox.test(low, high, alternative = 'less',
+                       paired = FALSE, exact = FALSE)
+
+  # concatenate
   ppi_scales <- c(ppi_scales, var)
   norm_test <- c(norm_test, norm$p.value)
-  w_stat <- c(w_stat, w_res$statistic)
+  t_stat <- c(w_stat, w_res$statistic)
   p_vals <- c(p_vals, w_res$p.value)
 
-  diff <- bootdif(y = ppi_data[, var], g = ppi_data$pp_group)
+  diff <- bootdif(y = ppi_data[, var], g = ppi_data$pp_group, b = 10000)
   boot_diffs <- c(boot_diffs, diff['Mean'])
   boot_cis <- c(boot_cis,
                 paste(round(diff['Lower'], 3),
@@ -183,7 +240,7 @@ for (var in names(ppi_data)[-1]) {
 # create summary table
 pp_scales <- data.frame(ppi_scales)
 pp_scales$normality <- norm_test
-pp_scales$statistic <- w_stat
+pp_scales$wx_stat <- t_stat
 pp_scales$p_value <- p_vals
 pp_scales$fdr <- p.adjust(p_vals, 'fdr')
 pp_scales$sig <- ifelse(pp_scales$fdr < 0.001, '***',
