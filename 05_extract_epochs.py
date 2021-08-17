@@ -90,9 +90,9 @@ for event in range(len(new_evs[:, 2])):
         # save block based on onset (before or after break)
         if (new_evs[event, 0] / sfreq) < block_end[0]:
             block.append('Single')
-        elif ((new_evs[event, 0] / sfreq) > block_end[0]) & ((new_evs[event, 0] / sfreq) < block_end[1]):
+        elif ((new_evs[event, 0] / sfreq) > block_end[0]) & ((new_evs[event, 0] / sfreq) < block_end[1]):  # noqa: E501
             block.append('Single')
-        elif ((new_evs[event, 0] / sfreq) > block_end[1]) & ((new_evs[event, 0] / sfreq) < block_end[2]):
+        elif ((new_evs[event, 0] / sfreq) > block_end[1]) & ((new_evs[event, 0] / sfreq) < block_end[2]):  # noqa: E501
             block.append('Dual')
         elif (new_evs[event, 0] / sfreq) > block_end[2]:
             block.append('Dual')
@@ -384,12 +384,11 @@ for cue, probe in zip(cue_events[:, 2], probe_events[:, 2]):
     probes.append(probe)
 
 # subject's experimental group
-if subject in [1, 4, 7, 8, 10, 13, 18, 19, 20, 21, 22, 23, 25]:
+group = np.nan
+if subject in [1, 2, 4, 6, 7, 8, 11, 14, 19, 20, 21, 22, 24, 26]:
     group = 'Low'
-elif subject in [2, 3, 6, 9, 11, 12, 14, 15, 16, 17, 24, 26, 27]:
+elif subject in [3, 5, 10, 12, 13, 15, 16, 17, 18, 23, 25, 27, 28]:
     group = 'High'
-elif subject in [5]:
-    group = np.nan
 
 # create data frame with epochs metadata
 metadata = {'group': np.delete(np.repeat(group, trial),  broken, 0),

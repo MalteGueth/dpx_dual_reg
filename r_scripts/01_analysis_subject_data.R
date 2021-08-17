@@ -23,7 +23,7 @@ host <- Sys.info()
 if (grep('Joses',  host['nodename']) || grep('ma',  host['nodename'])) {
   
   # default path in project structure
-  path_subject_data <- '../data/subject_data/'
+  path_subject_data <- '../data'
   
   } else {
   
@@ -34,7 +34,7 @@ if (grep('Joses',  host['nodename']) || grep('ma',  host['nodename'])) {
 # 2) import subject data -----------------------------------------------------
 getPacks(c('dplyr', 'tidyr'))
 
-ppi_data <- read.table(paste0(path_subject_data, 'ppi_data.tsv'), 
+ppi_data <- read.table(paste0(path_subject_data, '/subject_data/ppi_data.tsv'),
                            header = T, sep = '\t')
 
 # add descriptive group name
