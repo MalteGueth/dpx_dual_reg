@@ -4,7 +4,10 @@
 # Created on: 05.03.21
 # R version : 4.0.2 (2020-06-22), Taking Off Again
 
-setwd('~/Documents/projects/dpx_dual_reg/code_dpx_dual-reg/')
+# --- set working directory ---
+# use this if working from r-studio
+curr_path <- dirname(rstudioapi::getSourceEditorContext()$path)
+setwd(dirname(curr_path))
 
 # source function for fast loading and installing of packages
 source('./r_functions/getPacks.R')
@@ -15,24 +18,26 @@ source('./r_functions/spr2.R')
 # get system and user information
 host <- Sys.info()
 
-# set default path or promt user for other path
-if (host['nodename'] == "josealanis-desktop") {
-  
-  # defaut path in project structure
-  path_to_rt <- '../data/derivatives/results'
-  
-} else {
-  
-  path_to_rt <- readline('Please provide path to behavioral data: ')
+# set default path or ask user for other path
+if (grep('Joses', host['nodename']) || grep('ma', host['nodename'])) {
+
+  # default path in project structure
+  path_to_data <- '../data'
+
+  } else {
+
+  path_to_data <- readline('Please provide path to subject data: ')
   
 }
 
-# 2) import in the data -------------------------------------------------------
+# 2) import in the data ------------------------------------------------------
+
 # this part requires the package 'dplyr'
 getPacks('dplyr')
 
 # files in dir
-rt_files <- list.files(path = paste(path_to_rt, 'rt', sep = '/'),
+rt_files <- list.files(path = paste(path_to_data, 'derivatives/results/rt',
+                                    sep = '/'),
                        full.names = T)
 
 # read in the files
@@ -42,7 +47,8 @@ rt_list <- lapply(rt_files, read.table, sep = '\t', header = T)
 rt_df <- bind_rows(rt_list, .id = "column_label")
 
 # recode block variable
-rt_df <- rt_df %>% mutate(block =  ifelse(block == 2, 0, block)) %>%
+rt_df <- rt_df %>%
+  mutate(block =  ifelse(block == 2, 0, block)) %>%
   mutate(block = factor(block, labels = c('Baseline', 'Regulation')))
 
 # # exclude subject XX if necessary
