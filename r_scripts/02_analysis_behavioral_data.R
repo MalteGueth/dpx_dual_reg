@@ -35,7 +35,7 @@ if (grep('Joses', host['nodename']) || grep('ma', host['nodename'])) {
 # this part requires the package 'dplyr'
 getPacks('dplyr')
 
-# files in dir
+# get RT files names
 rt_files <- list.files(path = paste(path_to_data, 'derivatives/results/rt',
                                     sep = '/'),
                        full.names = T)
@@ -51,12 +51,32 @@ rt_df <- rt_df %>%
   mutate(block =  ifelse(block == 2, 0, block)) %>%
   mutate(block = factor(block, labels = c('Baseline', 'Regulation')))
 
-# # exclude subject XX if necessary
-# rt_df <- rt_df %>% filter(!subject == 51)
+# read in the ppi data
+ppi_data <- read.table(paste0(path_to_data, '/subject_data/ppi_data.tsv'),
+                       header = T, sep = '\t')
+# remove subject 9 (no group assignment)
+ppi_data <- ppi_data %>% 
+  filter(!group_pattern == 0) %>%
+  mutate(ix = row_number(ix))
+
+# add descriptive group name
+ppi_data <- ppi_data %>%
+  mutate(pp_group = ifelse(group_pattern == 1, 'Low',
+                           ifelse(group_pattern == 2, 'High', NA)))
+
+# merge the two data frames
+ppi_scales <- ppi_data %>% 
+  select(ix, pp_group, total_pr, si_pr, sp_pr, f_pr)
+rt_df <- rt_df %>% 
+  left_join(., ppi_scales, by = c('subject' = 'ix')) %>%
+  select(-c(column_label, group)) %>%
+  select(subject, pp_group, block, trial, cue, probe, run, rt,
+         reaction_cues, reaction_probes, total_pr:f_pr) %>%
+  filter(!is.na(pp_group))
 
 # 3) exploratory analyses correct reactions -----------------------------------
 
-# extract trials with correct reponses
+# extract trials with correct responses
 corrects <- rt_df %>%
   filter(reaction_cues == 'Correct' & reaction_probes == 'Correct')
 
@@ -65,7 +85,130 @@ corrects <- rt_df %>%
 # e.g., only probes AX, AY, BX and BY should be present
 summary(corrects); unique(corrects$probe)
 
+# plausibility checks
+# e.g., rt min should be > 0.0, max < 0.750
+# e.g., only probes AX, AY, BX and BY should be present
+summary(corrects); unique(corrects$probe)
+
+# get rid of extreme values, e.g., rt values very close to 0
+# using winsorsed scores
+getPacks(c('psych'))
+corrects <- corrects %>%
+  group_by(subject, probe) %>%
+  mutate(w_rt = winsor(rt, trim = 0.05))
+
+# create aplot to compare the distributions
+png('../data/derivatives/results/figures/rt_dist.png',
+    height = 3.5, width = 7, units="in", res = 600)
+par(mfrow=c(1, 2))
 # check distribution of rt
+hist(corrects$w_rt,
+     main ='5% Trimmed RT', xlab = 'RT',
+     breaks = 150, xlim = c(0, 0.8), ylim = c(0, 500))
+rug(corrects$w_rt)
+
+# check distribution of rt
+hist(corrects$rt,
+     main ='Raw RT', xlab = 'RT',
+     breaks = 150, xlim = c(0, 0.8), ylim = c(0, 500))
+rug(corrects$rt)
+dev.off()
+
+# 4) statistical analyses correct reactions -----------------------------------
+getPacks(c('lme4', 'lmerTest', 'car'))
+
+corr_mod <- corrects %>%
+  arrange(subject) %>%
+  mutate(pp_group = factor(pp_group, levels = c('High', 'Low')),
+         probe = factor(probe, levels = c('AX', 'AY', 'BX', 'BY')),
+         subject = factor(subject, levels = sort(unique(corrects$subject))),
+         rt = w_rt * 1000) 
+# %>%
+#   group_by(subject, pp_group, block, probe) %>%
+#   summarise(mean_rt = mean(w_rt))
+
+mod_rt_0 <- lmer(data = corr_mod, 
+                 rt ~  probe + (1+block|subject/probe), 
+                 contrasts = list(probe = 'contr.sum'))
+anova(mod_rt_0)
+# car::Anova(mod_rt_0, test = 'F', type = 'III')
+summary(mod_rt_0)
+
+getPacks(c('emmeans'))
+# emm_options(pbkrtest.limit = 14450)
+probe_means <- emmeans(mod_rt_0, ~ probe)
+contrast(probe_means, 'tukey', adjust = 'fdr')
+
+getPacks(c('sjPlot', 'performance'))
+plot_model(mod_rt_0, 'int')
+check_model(mod_rt_0)
+
+# 5) plot effect of probe -----------------------------------------------------
+getPacks(c('ggplot2', 'ggbeeswarm', 'see', 'viridis'))
+
+mean_rt <- corr_mod %>%
+  ungroup() %>%
+  group_by(subject, pp_group, probe) %>%
+  summarise(mean_rt = mean(rt))
+
+pj = position_jitter(0.10, seed = 52)
+plot_mean_rt <- ggplot(data = mean_rt,
+       aes(y = mean_rt,
+           x = probe, 
+           fill = pp_group,
+           shape = pp_group,
+           color = pp_group,
+           group = subject)) +
+  geom_violinhalf(aes(group = probe), show.legend = F, alpha = 0.25,
+                  color = 'black', fill = 'black', size = 0.2, flip = T) + 
+  geom_line(size = 0.4, alpha = 0.3, position = pj) +
+  geom_point(color = 'black', size = 1.5, stroke = 0.8, alpha = 1.0, position = pj) +
+  scale_shape_manual(values = c(24, 25)) +
+  scale_fill_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  scale_color_manual(values = c('#B40F20FF', '#46ACC8FF')) +
+  scale_y_continuous(limits = c(100.0, 700.0), breaks = seq(100, 700, 100)) +
+  geom_segment(aes(x = -Inf, y = 100.0, xend = -Inf, yend = 700.0),
+               color = 'black', size = rel(0.5), linetype = 1) +
+  geom_segment(aes(x = 'AX', y = -Inf, xend = 'BY', yend = -Inf),
+               color = 'black', size = rel(0.5), linetype = 1) +
+  labs(title = 'Reaction time by cue-probe combination',
+       x = 'Cue-Probe combination', y = 'Mean RT [ms]',
+       color = 'PPI Group', fill = 'PPI Group', shape = 'PPI Group') +
+  theme(plot.background = element_rect(fill = "white"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(color = 'gray98', size = 0.5),
+        strip.background = element_blank(),
+        plot.title = element_text(color = 'black',
+                                  size = 14,
+                                  face = 'bold',
+                                  family='Mukta'),
+        axis.title.x = element_text(color = 'black',
+                                    size = 14,
+                                    face = 'bold',
+                                    margin = margin(t = 15),
+                                    family='Mukta'),
+        axis.title.y = element_text(color = 'black',
+                                    size = 14,
+                                    face = 'bold',
+                                    margin = margin(r = 15),
+                                    family='Mukta'),
+        axis.text = element_text(color = 'black',
+                                 size = 12),
+        legend.position = 'right',
+        legend.direction = 'vertical',
+        legend.key = element_blank(),
+        legend.key.height = unit(1, 'cm'),
+        legend.key.width = unit(1, 'cm')); plot_mean_rt
+ggsave('../data/derivatives/results/figures/rt_means_plot.png',
+       plot_mean_rt, width = 6.0, height = 4.5, dpi = 600)
+  
+
+
+
+
+
+
+ # check distribution of rt
 hist(corrects$rt, breaks = 50)
 rug(corrects$rt)
 
@@ -98,7 +241,7 @@ getPacks(c('ggplot2', 'viridis', 'Hmisc'))
 
 # data for plot
 m_rt <- corrects %>%
-  group_by(subject, probe, block) %>%
+  group_by(subject, probe, block, pp_group) %>%
   summarise(m = mean(rt))
 
 m_rt <- corrects %>%
@@ -119,7 +262,7 @@ pd <- position_jitter(0.2)
 rt_plot <- ggplot(data = m_rt,
                   aes(x = probe, y = m,
                       fill = probe, shape = probe)) +
-  facet_wrap(~ block, ncol = 2) +
+  facet_grid(pp_group ~ block) +
   geom_line(aes(group = subject), position = pd, alpha = 0.1, size = 0.4) +
   geom_point(position = pd) +
   scale_shape_manual(values = c(25, 24, 23, 21)) +
