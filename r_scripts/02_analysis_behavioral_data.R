@@ -19,7 +19,7 @@ source('./r_functions/spr2.R')
 host <- Sys.info()
 
 # set default path or ask user for other path
-if (grep('Joses', host['nodename']) || grep('ma', host['nodename'])) {
+if (grepl('Jo|jo|ma', host['nodename'])) {
 
   # default path in project structure
   path_to_data <- '../data'
@@ -48,8 +48,7 @@ rt_df <- bind_rows(rt_list, .id = "column_label")
 
 # recode block variable
 rt_df <- rt_df %>%
-  mutate(block =  ifelse(block == 2, 0, block)) %>%
-  mutate(block = factor(block, labels = c('Baseline', 'Regulation')))
+  mutate(block =  ifelse(block == 'Single', 'Baseline', 'Regulation'))
 
 # read in the ppi data
 ppi_data <- read.table(paste0(path_to_data, '/subject_data/ppi_data.tsv'),
@@ -67,7 +66,8 @@ ppi_data <- ppi_data %>%
 # merge the two data frames
 ppi_scales <- ppi_data %>% 
   select(ix, pp_group, total_pr, si_pr, sp_pr, f_pr)
-rt_df <- rt_df %>% 
+
+rt_df <- rt_df %>%
   left_join(., ppi_scales, by = c('subject' = 'ix')) %>%
   select(-c(column_label, group)) %>%
   select(subject, pp_group, block, trial, cue, probe, run, rt,
@@ -79,11 +79,6 @@ rt_df <- rt_df %>%
 # extract trials with correct responses
 corrects <- rt_df %>%
   filter(reaction_cues == 'Correct' & reaction_probes == 'Correct')
-
-# plausibility checks
-# e.g., rt min should be > 0.0, max < 0.750
-# e.g., only probes AX, AY, BX and BY should be present
-summary(corrects); unique(corrects$probe)
 
 # plausibility checks
 # e.g., rt min should be > 0.0, max < 0.750
@@ -114,37 +109,16 @@ hist(corrects$rt,
 rug(corrects$rt)
 dev.off()
 
-# 4) statistical analyses correct reactions -----------------------------------
-getPacks(c('lme4', 'lmerTest', 'car'))
+# 4) plot effect of probe -----------------------------------------------------
+getPacks(c('ggplot2', 'ggbeeswarm', 'see', 'viridis'))
 
+# set up data frame for modelling and plots
 corr_mod <- corrects %>%
   arrange(subject) %>%
   mutate(pp_group = factor(pp_group, levels = c('High', 'Low')),
          probe = factor(probe, levels = c('AX', 'AY', 'BX', 'BY')),
          subject = factor(subject, levels = sort(unique(corrects$subject))),
-         rt = w_rt * 1000) 
-# %>%
-#   group_by(subject, pp_group, block, probe) %>%
-#   summarise(mean_rt = mean(w_rt))
-
-mod_rt_0 <- lmer(data = corr_mod, 
-                 rt ~  probe + (1+block|subject/probe), 
-                 contrasts = list(probe = 'contr.sum'))
-anova(mod_rt_0)
-# car::Anova(mod_rt_0, test = 'F', type = 'III')
-summary(mod_rt_0)
-
-getPacks(c('emmeans'))
-# emm_options(pbkrtest.limit = 14450)
-probe_means <- emmeans(mod_rt_0, ~ probe)
-contrast(probe_means, 'tukey', adjust = 'fdr')
-
-getPacks(c('sjPlot', 'performance'))
-plot_model(mod_rt_0, 'int')
-check_model(mod_rt_0)
-
-# 5) plot effect of probe -----------------------------------------------------
-getPacks(c('ggplot2', 'ggbeeswarm', 'see', 'viridis'))
+         rt = w_rt * 1000)
 
 mean_rt <- corr_mod %>%
   ungroup() %>%
@@ -154,13 +128,13 @@ mean_rt <- corr_mod %>%
 pj = position_jitter(0.10, seed = 52)
 plot_mean_rt <- ggplot(data = mean_rt,
        aes(y = mean_rt,
-           x = probe, 
+           x = probe,
            fill = pp_group,
            shape = pp_group,
            color = pp_group,
            group = subject)) +
   geom_violinhalf(aes(group = probe), show.legend = F, alpha = 0.25,
-                  color = 'black', fill = 'black', size = 0.2, flip = T) + 
+                  color = 'black', fill = 'black', size = 0.2, flip = T) +
   geom_line(size = 0.4, alpha = 0.3, position = pj) +
   geom_point(color = 'black', size = 1.5, stroke = 0.8, alpha = 1.0, position = pj) +
   scale_shape_manual(values = c(24, 25)) +
@@ -201,10 +175,199 @@ plot_mean_rt <- ggplot(data = mean_rt,
         legend.key.width = unit(1, 'cm')); plot_mean_rt
 ggsave('../data/derivatives/results/figures/rt_means_plot.png',
        plot_mean_rt, width = 6.0, height = 4.5, dpi = 600)
-  
+
+# 5) statistical analyses correct reactions -----------------------------------
+getPacks(c('lme4'))
+
+# fit models to assess the effect of cue probe combination
+mod_rt_0 <- lmer(data = corr_mod,
+                 rt ~ (1|subject))
+
+mod_rt_1 <- lmer(data = corr_mod,
+                 rt ~  probe + (1|subject),
+                 contrasts = list(probe = 'contr.treatment'))
+
+mod_rt_2 <- lmer(data = corr_mod,
+                 rt ~  probe + (1|subject/probe),
+                 contrasts = list(probe = 'contr.treatment'))
+
+# 5) check model fit ----------------------------------------------------------
+getPacks(c('performance', 'partR2'))
+test_bf(mod_rt_1, mod_rt_2)
+compare_performance(mod_rt_0, mod_rt_1, mod_rt_2, rank = T)
+
+# check plots
+plot(compare_performance(mod_rt_1, mod_rt_2, rank = T))
+plot(check_distribution(mod_rt_2))
+
+# 6) compute effects based on the best model ----------------------------------
+getPacks(c('car', 'sjPlot', 'partR2', 'emmeans'))
+
+# F-values for main effect of cue-probe combination
+# (Type III Wald F tests with Kenward-Roger df)
+# *** will take sometime to run ***
+probes_anova <- car::Anova(mod_rt_2, test = 'F', type = 'III')
+summary(mod_rt_2)
+
+# save F-test table
+tab_df(as.data.frame(probes_anova),
+       title = 'Anova probe model (RT ~ probe + (1+block|subject/probe))',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/anova_probe.html'),
+       digits = 3)
+
+# compute effect sizes Semi-Partial R-squared
+# for main effect probe (cf. Nakagawa & Schielzeth, 2013)
+partial_R2 <- partR2(mod_rt_2, partbatch = list(probe = c('probe')),
+                     R2_type = "marginal", nboot = 10000, CI = 0.95)
+# save r2 table
+tab_df(as.data.frame(partial_R2$R2),
+       title = 'Semi-Partial R-squared (model probe)',
+       file = paste0(path_to_data, '/derivatives/results/tables/R2_probes.html'),
+       digits = 3)
+
+# compute estimated marginal means
+# *** will take sometime to run ***
+emm_options(pbkrtest.limit = 14450)
+probe_means <- emmeans(mod_rt_2, ~ probe)
+# save means table
+tab_df(as.data.frame(probe_means),
+       title = 'Emmeans probe model (RT ~ probe + (1+block|subject/probe))',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/emmeans_probe.html'),
+       digits = 3)
+
+# model variance estimates and residual degrees of freedom
+mod_var <- VarCorr(mod_rt_0)
+totSD <- sqrt(sum(as.data.frame(mod_var)$vcov))
+edf <- df.residual(mod_rt_0)
+
+# compute effect sizes for the pairwise contrasts
+es_probes <- eff_size(probe_means, sigma = totSD, edf = edf); es_probes
+# save effect sizes for probe contrast
+tab_df(as.data.frame(es_probes),
+       title = 'Contrasts probe model (RT ~ probe + (1+block|subject/probe))',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/eff_size_contrasts_probe.html'),
+       digits = 3)
+
+# compute contrasts
+contr_probes <- contrast(probe_means, 'tukey', adjust = 'fdr')
+# save contrasts table
+tab_df(as.data.frame(contr_probes),
+       title = 'Contrasts probe model (RT ~ probe + (1+block|subject/probe))',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/contrasts_probe.html'),
+       digits = 3)
+# compute contrast CIs
+ci_probes <- confint(contr_probes)
+# save CIs table
+tab_df(as.data.frame(ci_probes),
+       title = 'Contrasts probe model (RT ~ probe + (1+block|subject/probe))',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/cis_contrast_probe.html'),
+       digits = 3)
+
+# compute descriptives for the observed values
+descriptives_rt <- corr_mod %>%
+  group_by(probe) %>%
+  summarise(mean(rt), sd(rt))
+tab_df(as.data.frame(descriptives_rt),
+       title = 'Descripvives RT by Cue-Probe combination.',
+       file = paste0(path_to_data,
+                     '/derivatives/results/tables/descriptives_probe_rt.html'),
+       digits = 3)
+
+# save computed objects
+save(list=c("probes_anova", "probe_means"),
+     file=paste0(path_to_data, "/derivatives/results/stats/probe_stats.RData"))
+
+
+# 7) compute proactive control measures ---------------------------------------
+# clean up a bit
+rm(list = ls()[!(ls() %in% c('corr_mod', 'corrects', 'path_to_data', 'rt_df'))])
+
+# compute total number of trials
+total <- rt_df %>%
+  mutate(probe_stim = ifelse(nchar(probe) > 1, substr(probe, 2, 2), probe)) %>%
+  mutate(probe = paste0(cue, probe_stim)) %>%
+  group_by(subject, block, probe) %>%
+  summarise(n_trials = sum(!is.na(trial))) %>%
+  arrange(subject, block, probe)
+
+# compute number of errors and error rate per condition
+errors <- rt_df %>%
+  filter(reaction_probes == 'Incorrect') %>%
+  group_by(subject, block, probe) %>%
+  summarise(n_errors = sum(!is.na(trial))) %>%
+  arrange(subject, block, probe) %>%
+  left_join(total, ., by = c('subject', 'block', 'probe')) %>%
+  mutate(n_errors = ifelse(is.na(n_errors), 0, n_errors)) %>%
+  mutate(error_rate = (n_errors + 0.5) / (n_trials + 1))
+
+# compute number of correct responses and correct rate per condition
+n_corrects <- rt_df %>%
+  filter(reaction_probes == 'Correct') %>%
+  mutate(probe = factor(probe)) %>%
+  group_by(subject, block, probe) %>%
+  mutate(n_corrects = sum(!is.na(trial))) %>%
+  summarise(n_corrects = mean(n_corrects)) %>%
+  arrange(subject, block, probe) %>%
+  left_join(total, ., by = c('subject', 'block', 'probe')) %>%
+  mutate(correct_rate = (n_corrects + 0.5) / (n_trials + 1))
+
+# merge error and corrects rates
+behavioural_performance <- n_corrects %>%
+  left_join(.,  errors, by = c('subject', 'block', 'probe', 'n_trials'))
+
+# calculate the a-cue-bias index
+a_bias <-  behavioural_performance %>%
+  filter(probe == 'AX' | probe == 'AY') %>%
+  group_by(subject) %>%
+  mutate(a_bias =
+           ifelse(probe == 'AX',
+                  0.5 * (qnorm(correct_rate) + qnorm(lead(error_rate))),
+                  NA)) %>%
+  select(subject, block, a_bias) %>%
+  filter(!is.na(a_bias)) %>%
+  group_by(subject)
+# save  file
+a_bias_file <- paste0(path_to_data, '/derivatives/results/stats/a_bias.tsv')
+write.table(a_bias, file = a_bias_file, sep = '\t', row.names = F)
+
+# calculate the d-prime index
+d_prime <-  behavioural_performance %>%
+  filter(probe == 'AX' | probe == 'BX') %>%
+  group_by(subject) %>%
+  mutate(d_prime =
+           ifelse(probe == 'AX',
+                  qnorm(correct_rate) - qnorm(lead(error_rate)),
+                  NA)) %>%
+  select(subject, block, d_prime) %>%
+  filter(!is.na(d_prime)) %>%
+  group_by(subject)
+# save  file
+d_prime_file <- paste0(path_to_data, '/derivatives/results/stats/d_prime.tsv')
+write.table(d_prime, file = d_prime_file, sep = '\t', row.names = F)
 
 
 
+# calculate the proactive behaviour index
+pbi_rt <- corrects %>%
+  group_by(subject, probe) %>%
+  filter(probe == 'BX' | probe == 'AY') %>%
+  group_by(subject) %>%
+  mutate(pbi_rt = ifelse(probe == 'AY',
+                          (m_rt-lead(m_rt)) / (m_rt+lead(m_rt)), NA)) %>%
+  select(subject, pbi_rt) %>% filter(!is.na(pbi_rt)) %>%
+  group_by(subject) %>%
+  summarise(pbi_rt = mean(pbi_rt)) %>%
+  mutate(pbi_rt = pbi_rt - mean(pbi_rt))
+
+pbi_file <- paste(path_to_rt, 'pbi.tsv', sep = '/')
+write.table(pbi_rt,
+            file = pbi_file,
+            sep = '\t')
 
 
 
