@@ -58,7 +58,7 @@ if 'Jose' in node and 'n' in system:
     n_jobs = 2  # This station has 4 cores (we'll use 2).
 elif 'jose' in node and 'x' in system:
     # pc at home
-    data_dir = '../data_bids'
+    data_dir = '../data'
     n_jobs = 'cuda'  # Use NVIDIA CUDA GPU processing
 elif 'ma04' in node:
     data_dir = '../data'
