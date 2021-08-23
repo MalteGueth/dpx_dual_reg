@@ -87,7 +87,7 @@ summary(corrects); unique(corrects$probe)
 
 # get rid of extreme values, e.g., rt values very close to 0
 # using winsorsed scores
-getPacks(c('psych'))
+getPacks('psych')
 corrects <- corrects %>%
   group_by(subject, probe) %>%
   mutate(w_rt = winsor(rt, trim = 0.05))
@@ -125,7 +125,7 @@ mean_rt <- corr_mod %>%
   group_by(subject, pp_group, probe) %>%
   summarise(mean_rt = mean(rt))
 
-pj = position_jitter(0.10, seed = 52)
+pj <- position_jitter(0.10, seed = 52)
 plot_mean_rt <- ggplot(data = mean_rt,
        aes(y = mean_rt,
            x = probe,
@@ -177,7 +177,7 @@ ggsave('../data/derivatives/results/figures/rt_means_plot.png',
        plot_mean_rt, width = 6.0, height = 4.5, dpi = 600)
 
 # 5) statistical analyses correct reactions -----------------------------------
-getPacks(c('lme4'))
+getPacks('lme4')
 
 # fit models to assess the effect of cue probe combination
 mod_rt_0 <- lmer(data = corr_mod,
@@ -329,8 +329,7 @@ a_bias <-  behavioural_performance %>%
                   0.5 * (qnorm(correct_rate) + qnorm(lead(error_rate))),
                   NA)) %>%
   select(subject, block, a_bias) %>%
-  filter(!is.na(a_bias)) %>%
-  group_by(subject)
+  filter(!is.na(a_bias))
 # save  file
 a_bias_file <- paste0(path_to_data, '/derivatives/results/stats/a_bias.tsv')
 write.table(a_bias, file = a_bias_file, sep = '\t', row.names = F)
@@ -344,31 +343,37 @@ d_prime <-  behavioural_performance %>%
                   qnorm(correct_rate) - qnorm(lead(error_rate)),
                   NA)) %>%
   select(subject, block, d_prime) %>%
-  filter(!is.na(d_prime)) %>%
-  group_by(subject)
+  filter(!is.na(d_prime))
 # save  file
 d_prime_file <- paste0(path_to_data, '/derivatives/results/stats/d_prime.tsv')
 write.table(d_prime, file = d_prime_file, sep = '\t', row.names = F)
 
-
-
 # calculate the proactive behaviour index
-pbi_rt <- corrects %>%
+pbi_errors <- behavioural_performance %>%
   group_by(subject, probe) %>%
-  filter(probe == 'BX' | probe == 'AY') %>%
+  filter(probe == 'AY' | probe == 'BX') %>%
   group_by(subject) %>%
-  mutate(pbi_rt = ifelse(probe == 'AY',
-                          (m_rt-lead(m_rt)) / (m_rt+lead(m_rt)), NA)) %>%
-  select(subject, pbi_rt) %>% filter(!is.na(pbi_rt)) %>%
-  group_by(subject) %>%
-  summarise(pbi_rt = mean(pbi_rt)) %>%
-  mutate(pbi_rt = pbi_rt - mean(pbi_rt))
+  mutate(pbi_errors =
+           ifelse(probe == 'AY',
+                  (error_rate - lead(error_rate)) / (error_rate + lead(error_rate)),
+                  NA)) %>%
+  select(subject, block, pbi_errors) %>%
+  filter(!is.na(pbi_errors))
+# save  file
+pbi_errors_file <- paste0(path_to_data,
+                          '/derivatives/results/stats/pbi_errors.tsv')
+write.table(pbi_errors, file = pbi_errors_file, sep = '\t', row.names = F)
 
-pbi_file <- paste(path_to_rt, 'pbi.tsv', sep = '/')
-write.table(pbi_rt,
-            file = pbi_file,
-            sep = '\t')
-
+pbi_rt <- corr_mod %>%
+  group_by(subject, block, probe) %>%
+  filter(probe == 'AY' | probe == 'BX') %>%
+  summarise(mean_rt =  mean(rt)) %>%
+  mutate(pbi_rt =
+           ifelse(probe == 'AY',
+                  (mean_rt - lead(mean_rt)) / (mean_rt + lead(mean_rt)),
+                  NA)) %>%
+  select(subject, block, pbi_rt) %>%
+  filter(!is.na(pbi_rt))
 
 
  # check distribution of rt
