@@ -1,6 +1,6 @@
 # Thompson, J. Bootstrapping a Confidence Interval for a Difference in Means.
 # https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.579.1330&rep=rep1&type=pdf
-bootdif <- function(y, g) {
+bootdif <- function(y, g, b = 5000) {
   # Ensure treatment group is a factor
   g <- as.factor(g)
 
@@ -8,9 +8,9 @@ bootdif <- function(y, g) {
   # variable y for each treatment group (A and B); this code
   # uses 5000 samples, but can easily be changed
   require(Hmisc)
-  a <- attr(smean.cl.boot(y[g == levels(g)[1]], B = 5000, reps=TRUE),
+  a <- attr(smean.cl.boot(y[g == levels(g)[1]], B = b, reps=TRUE),
             'reps')
-  b <- attr(smean.cl.boot(y[g == levels(g)[2]], B = 5000, reps=TRUE),
+  b <- attr(smean.cl.boot(y[g == levels(g)[2]], B = b, reps=TRUE),
             'reps')
 
   # Calculate the observed mean difference between groups
